@@ -16,6 +16,10 @@ import static jakarta.persistence.GenerationType.SEQUENCE;
 @AllArgsConstructor
 @Entity
 @Table(name = "messages")
+@NamedQuery(name = MessageConstants.FIND_MESSAGES_BY_CHAT_ID,
+            query = "SELECT m FROM Message m WHERE m.chat.id = :chatId ORDER BY m.createdDate")
+@NamedQuery(name = MessageConstants.SET_MESSAGE_TO_SEEN_BY_CHAT,
+            query = "UPDATE Message m SET m.state = :newState WHERE m.chat.id = :chatId")
 public class Message extends BaseAuditingEntity {
 
     @Id
