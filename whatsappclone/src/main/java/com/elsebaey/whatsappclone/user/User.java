@@ -36,7 +36,7 @@ public class User extends BaseAuditingEntity {
     private List<Chat> chatsAsRecipient;
 
     @Transient
-    public boolean isOnline() {
+    public boolean isUserOnline() {
         return lastSeen != null && lastSeen.isAfter(LocalDateTime.now().minusMinutes(LAST_ACTIVE_INTERVAL));
     }
 }
