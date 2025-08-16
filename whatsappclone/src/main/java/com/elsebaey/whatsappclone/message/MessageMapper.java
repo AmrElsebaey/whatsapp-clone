@@ -1,6 +1,7 @@
 package com.elsebaey.whatsappclone.message;
 
 import com.elsebaey.whatsappclone.chat.Chat;
+import com.elsebaey.whatsappclone.file.FileUtils;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -16,7 +17,7 @@ public class MessageMapper {
                 .senderId(message.getSenderId())
                 .recipientId(message.getRecipientId())
                 .createdAt(message.getCreatedDate())
-                // todo handle media conversion if needed
+                .media(FileUtils.readFileFromLocation(message.getMediaFilePath()))
                 .build();
     }
 }
