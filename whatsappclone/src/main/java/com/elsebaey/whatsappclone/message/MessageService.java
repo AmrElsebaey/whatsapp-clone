@@ -3,6 +3,10 @@ package com.elsebaey.whatsappclone.message;
 import com.elsebaey.whatsappclone.chat.Chat;
 import com.elsebaey.whatsappclone.chat.ChatRepository;
 import com.elsebaey.whatsappclone.file.FileService;
+import com.elsebaey.whatsappclone.file.FileUtils;
+import com.elsebaey.whatsappclone.notification.Notification;
+import com.elsebaey.whatsappclone.notification.NotificationService;
+import com.elsebaey.whatsappclone.notification.NotificationType;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -20,6 +24,7 @@ public class MessageService {
     private final ChatRepository chatRepository;
     private final MessageMapper messageMapper;
     private final FileService fileService;
+    private final NotificationService notificationService;
 
    public void saveMessage(MessageRequest messageRequest) {
        Chat chat = chatRepository.findById(messageRequest.getChatId())
@@ -35,7 +40,19 @@ public class MessageService {
 
        messageRepository.save(message);
 
-       // todo notify the recipient via WebSocket or other means
+       Notification notification = Notification.builder()
+               .chatId(chat.getId())
+               .content(messageRequest.getContent())
+               .senderId(messageRequest.getSenderId())
+               .recipientId(messageRequest.getRecipientId())
+               .messageType(messageRequest.getType())
+               .notificationType(NotificationType.MESSAGE)
+               .chatName(chat.getChatName(messageRequest.getSenderId()))
+               .build();
+
+
+
+       notificationService.sendNotification(messageRequest.getRecipientId(), notification);
     }
 
     public List<MessageResponse> findChatMessages(String chatId) {
@@ -50,11 +67,18 @@ public class MessageService {
        Chat chat = chatRepository.findById(chatId)
                .orElseThrow(() -> new EntityNotFoundException("Chat with id " + chatId + " not found"));
 
-//       final String recipientId = getRecipientId(chat, authentication);
+       final String recipientId = getRecipientId(chat, authentication);
 
        messageRepository.setMessagesToSeenByChatId(chatId, MessageState.SEEN);
 
-         // todo notify the recipient via WebSocket or other means
+       Notification notification = Notification.builder()
+                .chatId(chat.getId())
+                .senderId(recipientId)
+                .recipientId(getSenderId(chat, authentication))
+                .notificationType(NotificationType.SEEN)
+                .build();
+
+        notificationService.sendNotification(recipientId, notification);
     }
 
     public void uploadMediaMessage(String chatId, MultipartFile file, Authentication authentication) {
@@ -76,7 +100,16 @@ public class MessageService {
 
         messageRepository.save(message);
 
-        // todo notify the recipient via WebSocket or other means
+        Notification notification = Notification.builder()
+                .chatId(chat.getId())
+                .notificationType(NotificationType.IMAGE)
+                .senderId(senderId)
+                .recipientId(recipientId)
+                .messageType(MessageType.IMAGE)
+                .media(FileUtils.readFileFromLocation(filePath))
+                .build();
+
+        notificationService.sendNotification(recipientId, notification);
     }
 
     private String getSenderId(Chat chat, Authentication authentication) {
