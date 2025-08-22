@@ -1,5 +1,8 @@
 package com.elsebaey.whatsappclone.chat;
 
+import org.springframework.stereotype.Service;
+
+@Service
 public class ChatMapper {
     public ChatResponse toChatResponse(Chat chat, String senderId) {
         return ChatResponse.builder()
