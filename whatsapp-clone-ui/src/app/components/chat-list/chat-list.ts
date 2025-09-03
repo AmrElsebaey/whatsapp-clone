@@ -47,4 +47,5 @@ export class ChatList {
   selectContact(contact: UserResponse) {
   }
 
+  protected readonly console = console;
 }
