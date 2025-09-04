@@ -1,4 +1,4 @@
-import {Component, OnDestroy, OnInit} from '@angular/core';
+import {AfterViewChecked, Component, ElementRef, OnDestroy, OnInit, ViewChild} from '@angular/core';
 import {ChatResponse, MessageRequest, MessageResponse} from '../../services/models';
 import {ChatService, MessageService} from '../../services/services';
 import { ChatList } from '../../components/chat-list/chat-list';
@@ -17,7 +17,7 @@ import {Notification} from './notification';
   templateUrl: './main.html',
   styleUrl: './main.scss'
 })
-export class Main implements OnInit, OnDestroy{
+export class Main implements OnInit, OnDestroy, AfterViewChecked{
 
   chats: Array<ChatResponse> = [];
   selectedChat: ChatResponse = {};
@@ -25,6 +25,7 @@ export class Main implements OnInit, OnDestroy{
   showEmojis = false;
   messageContent = '';
   sockClient: any = null;
+  @ViewChild('scrollableDiv') scrollableDiv!: ElementRef<HTMLDivElement>
   private notificationSubscription: any;
 
   constructor(
@@ -32,6 +33,10 @@ export class Main implements OnInit, OnDestroy{
     private keycloakService: KeycloakService,
     private messageService: MessageService
   ) { }
+
+  ngAfterViewChecked(): void {
+        this.scrollBottom();
+    }
 
   ngOnDestroy(): void {
       if (this.sockClient !== null) {
@@ -95,7 +100,36 @@ export class Main implements OnInit, OnDestroy{
   }
 
   uploadMedia(target: EventTarget | null) {
+    const file = this.extractFileFormTarget(target);
+    if (file !== null) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) {
+          const mediaLines = reader.result.toString().split(',')[1];
 
+          this.messageService.uploadMediaMessage({
+            'chat-id': this.selectedChat.id as string,
+            body: {
+              file: file
+            }
+          }).subscribe({
+            next: () => {
+              const message: MessageResponse = {
+                senderId: this.getSenderId(),
+                recipientId: this.getRecipientId(),
+                content: 'Attachment',
+                type: 'IMAGE',
+                media: mediaLines,
+                state: 'SENT',
+                createdAt: new Date().toString()
+              }
+              this.chatMessages.push(message);
+            }
+          });
+        }
+      }
+      reader.readAsDataURL(file);
+    }
   }
 
   onSelectEmojis(emojiSelected: any) {
@@ -195,7 +229,6 @@ export class Main implements OnInit, OnDestroy{
             this.selectedChat.lastMessage = notification.content;
           }
           this.chatMessages.push(message);
-          console.log("Adding message to chat", message, "selectedChat", this.selectedChat);
           break;
         case 'SEEN':
           this.chatMessages.forEach(m => m.state = 'SEEN');
@@ -223,6 +256,21 @@ export class Main implements OnInit, OnDestroy{
         };
         this.chats.unshift(newChat);
       }
+    }
+  }
+
+  private extractFileFormTarget(target: EventTarget | null):File | null {
+    const htmlInputTarget = target as HTMLInputElement;
+    if (target === null || htmlInputTarget.files === null) {
+      return null;
+    }
+    return htmlInputTarget.files[0];
+  }
+
+  private scrollBottom() {
+    if (this.scrollableDiv) {
+      const div = this.scrollableDiv.nativeElement;
+      div.scrollTop = div.scrollHeight;
     }
   }
 }
