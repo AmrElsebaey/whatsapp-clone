@@ -47,7 +47,7 @@ public class MessageService {
                .recipientId(messageRequest.getRecipientId())
                .messageType(messageRequest.getType())
                .notificationType(NotificationType.MESSAGE)
-               .chatName(chat.getChatName(messageRequest.getSenderId()))
+               .chatName(chat.getTargetChatName(messageRequest.getSenderId()))
                .build();
 
 

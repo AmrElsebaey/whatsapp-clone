@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import {Component, OnDestroy, OnInit} from '@angular/core';
 import {ChatResponse, MessageRequest, MessageResponse} from '../../services/models';
 import {ChatService, MessageService} from '../../services/services';
 import { ChatList } from '../../components/chat-list/chat-list';
@@ -7,6 +7,9 @@ import {DatePipe} from '@angular/common';
 import {PickerComponent} from '@ctrl/ngx-emoji-mart';
 import {FormsModule} from '@angular/forms';
 import {EmojiData} from '@ctrl/ngx-emoji-mart/ngx-emoji';
+import * as Stomp from 'stompjs';
+import SockJS from 'sockjs-client';
+import {Notification} from './notification';
 
 @Component({
   selector: 'app-main',
@@ -14,13 +17,15 @@ import {EmojiData} from '@ctrl/ngx-emoji-mart/ngx-emoji';
   templateUrl: './main.html',
   styleUrl: './main.scss'
 })
-export class Main implements OnInit{
+export class Main implements OnInit, OnDestroy{
 
   chats: Array<ChatResponse> = [];
   selectedChat: ChatResponse = {};
   chatMessages: MessageResponse[] = [];
   showEmojis = false;
   messageContent = '';
+  sockClient: any = null;
+  private notificationSubscription: any;
 
   constructor(
     private chatService: ChatService,
@@ -28,7 +33,16 @@ export class Main implements OnInit{
     private messageService: MessageService
   ) { }
 
+  ngOnDestroy(): void {
+      if (this.sockClient !== null) {
+        this.sockClient.disconnect();
+        this.notificationSubscription.unsubscribe();
+        this.sockClient = null;
+      }
+    }
+
   ngOnInit(): void {
+    this.initWebSocket();
     this.getAllChats();
   }
 
@@ -141,5 +155,74 @@ export class Main implements OnInit{
       return this.selectedChat.recipientId as string;
     }
     return this.selectedChat.senderId as string;
+  }
+
+  private initWebSocket() {
+    if (this.keycloakService.keycloak.tokenParsed?.sub) {
+      let ws = new SockJS('http://localhost:8080/ws');
+      this.sockClient = Stomp.over(ws);
+      const subUrl = `/user/${this.keycloakService.keycloak.tokenParsed?.sub}/chat`;
+      this.sockClient.connect({'Authorization': 'Bearer ' + this.keycloakService.keycloak.token},
+        () => {
+          this.notificationSubscription = this.sockClient.subscribe(subUrl,
+            (message: any) => {
+              const notification: Notification = JSON.parse(message.body);
+              this.handleNotification(notification);
+            },
+            () => console.error('Error while connecting to WebSocket'));
+        }
+      );
+    }
+  }
+
+  private handleNotification(notification: Notification) {
+    if (!notification) return;
+    if (this.selectedChat && this.selectedChat.id === notification.chatId) {
+      switch (notification.notificationType) {
+        case 'MESSAGE':
+        case 'IMAGE':
+          const message: MessageResponse = {
+            senderId: notification.senderId,
+            recipientId: notification.recipientId,
+            content: notification.content,
+            type: notification.messageType,
+            media: notification.media,
+            createdAt: new Date().toString(),
+          };
+          if (notification.notificationType === 'IMAGE') {
+            this.selectedChat.lastMessage = 'Attachment';
+          } else {
+            this.selectedChat.lastMessage = notification.content;
+          }
+          this.chatMessages.push(message);
+          console.log("Adding message to chat", message, "selectedChat", this.selectedChat);
+          break;
+        case 'SEEN':
+          this.chatMessages.forEach(m => m.state = 'SEEN');
+          break;
+      }
+    } else {
+      const destChat = this.chats.find(c => c.id === notification.chatId);
+      if (destChat && notification.notificationType !== 'SEEN') {
+        if (notification.notificationType === 'MESSAGE') {
+          destChat.lastMessage = notification.content;
+        } else if (notification.notificationType === 'IMAGE') {
+          destChat.lastMessage = 'Attachment';
+        }
+        destChat.lastMessageTime = new Date().toString();
+        destChat.unreadMessages! += 1;
+      } else if (notification.notificationType === 'MESSAGE') {
+        const newChat: ChatResponse = {
+          id: notification.chatId,
+          chatName: notification.chatName,
+          senderId: notification.senderId,
+          recipientId: notification.recipientId,
+          lastMessage: notification.content,
+          lastMessageTime: new Date().toString(),
+          unreadMessages: 1
+        };
+        this.chats.unshift(newChat);
+      }
+    }
   }
 }
